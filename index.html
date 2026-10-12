@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2a2a3a">
+<script>
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+    <title>Песочные часы · 3 минуты · переворот</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #1e1e2f;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+            padding: 16px;
+            margin: 0;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .hourglass-container {
+            background: #2a2a3a;
+            padding: 32px 24px 40px;
+            border-radius: 64px 64px 48px 48px;
+            box-shadow: 0 25px 40px rgba(0, 0, 0, 0.6), inset 0 1px 4px rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border-bottom: 6px solid #4a3f5e;
+        }
+
+        /* Обёртка для переворота — сюда применяется transform */
+        .flip-wrapper {
+            transition: transform 0.6s cubic-bezier(0.34, 1.2, 0.64, 1);
+            transform: rotate(0deg);
+            cursor: pointer;
+        }
+
+        .flip-wrapper.flipped {
+            transform: rotate(180deg);
+        }
+
+        .glass {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.5));
+        }
+
+        .bulb {
+            width: 220px;
+            height: 110px;
+            background: linear-gradient(145deg, #f5e6b0, #e6c86e);
+            border-radius: 110px 110px 20px 20px;
+            border: 4px solid #7a5c2e;
+            border-top: 6px solid #9b7b4b;
+            border-bottom: none;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 -8px 12px rgba(0, 0, 0, 0.2), inset 0 8px 12px rgba(255, 255, 255, 0.5);
+        }
+
+        .bulb.bottom {
+            border-radius: 20px 20px 110px 110px;
+            border: 4px solid #7a5c2e;
+            border-bottom: 6px solid #9b7b4b;
+            border-top: none;
+            background: linear-gradient(145deg, #c9a85c, #b6924a);
+            box-shadow: inset 0 8px 12px rgba(0, 0, 0, 0.15), inset 0 -6px 10px rgba(255, 255, 255, 0.3);
+            height: 110px;
+        }
+
+        /* Песок в верхней колбе */
+        .sand-top {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: radial-gradient(circle at 30% 20%, #e6c86e, #a77c2c);
+            height: 100%;
+            transition: height 0.1s linear;
+            border-radius: 0 0 10px 10px;
+            box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Песок в нижней колбе */
+        .sand-bottom {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: radial-gradient(circle at 70% 80%, #e6c86e, #a77c2c);
+            height: 0%;
+            transition: height 0.1s linear;
+            border-radius: 10px 10px 0 0;
+            box-shadow: inset 0 -4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .neck {
+            width: 70px;
+            height: 18px;
+            background: linear-gradient(180deg, #b6924a, #7a5c2e);
+            border-radius: 8px;
+            margin: -2px 0;
+            border-left: 4px solid #6b4d24;
+            border-right: 4px solid #6b4d24;
+            box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+            z-index: 2;
+            position: relative;
+        }
+
+        .neck::after {
+            content: '';
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: #c49a3c;
+            border-radius: 50%;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 6px #e6c86e;
+        }
+
+        .stream {
+            width: 4px;
+            height: 24px;
+            background: linear-gradient(180deg, #e6c86e, #b6924a);
+            margin: -6px 0;
+            border-radius: 2px;
+            z-index: 1;
+            box-shadow: 0 0 6px #f5e6b0;
+            opacity: 0.9;
+            transition: opacity 0.2s;
+        }
+
+        .timer-display {
+            margin-top: 28px;
+            font-size: 3.2rem;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 4px;
+            color: #f5e6b0;
+            text-shadow: 0 4px 8px #00000055, 0 0 8px #e6c86e88;
+            background: #1e1e2a;
+            padding: 10px 28px;
+            border-radius: 60px;
+            border: 2px solid #7a5c2e;
+            box-shadow: inset 0 2px 10px #00000066, 0 8px 12px #00000033;
+            width: fit-content;
+            transition: color 0.2s;
+        }
+
+        .controls {
+            display: flex;
+            gap: 16px;
+            margin-top: 24px;
+        }
+
+        .btn {
+            background: #3f2e4a;
+            border: none;
+            border-radius: 60px;
+            color: #f5e6b0;
+            font-size: 1.3rem;
+            font-weight: 500;
+            padding: 12px 32px;
+            cursor: pointer;
+            box-shadow: 0 8px 0 #1f1528, 0 10px 20px #00000055;
+            transition: all 0.07s ease;
+            letter-spacing: 1px;
+            font-family: inherit;
+            border: 1px solid #9b7b4b66;
+        }
+
+        .btn:active {
+            transform: translateY(6px);
+            box-shadow: 0 2px 0 #1f1528, 0 8px 16px #00000055;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            transform: translateY(4px);
+            box-shadow: 0 4px 0 #1f1528;
+            cursor: not-allowed;
+        }
+
+        .btn.flip-btn {
+            background: #4a3f5e;
+            border-color: #b6924a88;
+        }
+
+        .hint {
+            color: #b9a6d4;
+            font-size: 0.8rem;
+            margin-top: 16px;
+            letter-spacing: 1px;
+            opacity: 0.8;
+            text-align: center;
+        }
+
+        @media (max-width: 500px) {
+            .bulb {
+                width: 160px;
+                height: 80px;
+            }
+            .bulb.bottom {
+                height: 80px;
+            }
+            .timer-display {
+                font-size: 2.4rem;
+                padding: 6px 20px;
+            }
+            .btn {
+                font-size: 1.1rem;
+                padding: 10px 22px;
+            }
+            .neck {
+                width: 50px;
+                height: 14px;
+            }
+            .stream {
+                height: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="hourglass-container">
+    <!-- Оборачиваем часы в flip-wrapper для поворота -->
+    <div class="flip-wrapper" id="flipWrapper">
+        <div class="glass">
+            <div class="bulb">
+                <div class="sand-top" id="sandTop"></div>
+            </div>
+            <div class="neck"></div>
+            <div class="stream" id="stream"></div>
+            <div class="bulb bottom">
+                <div class="sand-bottom" id="sandBottom"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="timer-display" id="timerDisplay">3:00</div>
+
+    <div class="controls">
+        <button class="btn" id="startBtn">▶ Старт</button>
+        <button class="btn flip-btn" id="flipBtn">🔄 Перевернуть</button>
+        <button class="btn" id="resetBtn">⟲ Сброс</button>
+    </div>
+    <div class="hint">нажмите на часы или кнопку «Перевернуть»</div>
+</div>
+
+<script>
+    (function() {
+        // КОНСТАНТЫ
+        const TOTAL_SECONDS = 180; // 3 минуты = 180 секунд
+
+        // DOM-элементы
+        const sandTop = document.getElementById('sandTop');
+        const sandBottom = document.getElementById('sandBottom');
+        const stream = document.getElementById('stream');
+        const timerDisplay = document.getElementById('timerDisplay');
+        const startBtn = document.getElementById('startBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const flipBtn = document.getElementById('flipBtn');
+        const flipWrapper = document.getElementById('flipWrapper');
+
+        // Состояние
+        let timeLeft = TOTAL_SECONDS;      // оставшиеся секунды до конца
+        let timerInterval = null;          // ссылка на setInterval
+        let isRunning = false;             // флаг работы
+        let isFlipped = false;             // флаг: перевёрнуты ли часы
+
+        // --- Вспомогательные функции ---
+
+        // Обновление визуализации песка.
+        // Если часы НЕ перевёрнуты: верхняя колба = оставшееся время, нижняя = прошедшее.
+        // Если часы ПЕРЕВЁРНУТЫ: визуально верх/низ меняются местами (CSS rotate),
+        // но логически "верхняя" колба всё ещё та, что была сверху до переворота.
+        // Мы просто всегда заполняем sand-top и sand-bottom в исходной системе координат,
+        // а CSS-поворот сам визуально меняет их местами.
+        function updateSandVisual() {
+            const percentLeft = (timeLeft / TOTAL_SECONDS) * 100;
+            sandTop.style.height = percentLeft + '%';
+            sandBottom.style.height = (100 - percentLeft) + '%';
+        }
+
+        function updateTimerText() {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            timerDisplay.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function updateStream() {
+            if (timeLeft <= 0 || !isRunning) {
+                stream.style.opacity = '0';
+            } else {
+                stream.style.opacity = '0.9';
+            }
+        }
+
+        function refreshUI() {
+            updateTimerText();
+            updateSandVisual();
+            updateStream();
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            isRunning = false;
+            updateStream();
+            startBtn.disabled = false;
+        }
+
+        // --- Логика таймера ---
+
+        function tick() {
+            if (timeLeft <= 0) {
+                stopTimer();
+                timeLeft = 0;
+                refreshUI();
+                startBtn.textContent = '⏸ Готово';
+                return;
+            }
+
+            timeLeft -= 1;
+            refreshUI();
+
+            if (timeLeft === 0) {
+                stopTimer();
+                startBtn.textContent = '⏸ Готово';
+                refreshUI();
+            }
+        }
+
+        function startTimer() {
+            if (isRunning) return;
+
+            // Если время уже вышло — сначала сбросим
+            if (timeLeft <= 0) {
+                resetTimer();
+            }
+
+            startBtn.disabled = true;
+            startBtn.textContent = '⏳ Идёт...';
+            isRunning = true;
+            updateStream();
+
+            timerInterval = setInterval(tick, 1000);
+        }
+
+        function resetTimer() {
+            stopTimer();
+            timeLeft = TOTAL_SECONDS;
+
+            // Сбрасываем переворот
+            if (isFlipped) {
+                isFlipped = false;
+                flipWrapper.classList.remove('flipped');
+            }
+
+            refreshUI();
+            startBtn.textContent = '▶ Старт';
+            startBtn.disabled = false;
+            stream.style.opacity = '0';
+        }
+
+        // --- ПЕРЕВОРОТ ---
+        // Логика: после переворота "новое оставшееся время" =
+        // = время, которое пересыпалось в нижнюю колбу (т.е. TOTAL - timeLeft).
+        // То есть если осталось 1:20 (timeLeft=80), то в нижней колбе 100 секунд.
+        // После переворота эти 100 секунд становятся "верхней" колбой,
+        // и отсчёт пойдёт с них: то есть таймер покажет 3:00 сразу после переворота?
+        // НЕТ. Нужно: переворачиваем — и теперь до конца остаётся ровно то,
+        // что было в нижней колбе (т.е. TOTAL - timeLeft). А цифры показывают
+        // новое оставшееся время. Но так как всего песка 3 минуты, а сверху
+        // теперь лежит бывший нижний песок, то оставшееся время = TOTAL - timeLeft.
+        // При этом визуально песок должен заполнить верхнюю (в новой системе) колбу.
+        // Проще всего: timeLeft = TOTAL - timeLeft, и НЕ менять CSS-класс flipped
+        // для песка, а просто перевернуть всю чашу. Тогда визуально:
+        // до переворота: sand-top = timeLeft%, sand-bottom = (TOTAL-timeLeft)%
+        // после переворота: CSS поворачивает на 180°, и визуально верхняя колба
+        // теперь та, что была нижней. А в ней как раз (TOTAL-timeLeft)% песка.
+        // И новое timeLeft = TOTAL - timeLeft — это как раз то, что было в нижней.
+        // Всё сходится.
+        function flipHourglass() {
+            // Если идёт отсчёт — не даём переворачивать? Нет, дадим — это же фишка.
+            // Но если время уже 0 — переворот бессмысленен.
+            if (timeLeft <= 0) {
+                // Если время вышло, переворот просто сбросит в исходное
+                resetTimer();
+                return;
+            }
+
+            // Меняем флаг
+            isFlipped = !isFlipped;
+
+            // Применяем/снимаем CSS-поворот
+            if (isFlipped) {
+                flipWrapper.classList.add('flipped');
+            } else {
+                flipWrapper.classList.remove('flipped');
+            }
+
+            // Главное: оставшееся время становится тем, что было в нижней колбе.
+            // Т.е. новое timeLeft = TOTAL - старое timeLeft.
+            timeLeft = TOTAL_SECONDS - timeLeft;
+
+            // Обновляем интерфейс
+            refreshUI();
+
+            // Если таймер был запущен — он продолжит тикать с новым значением.
+            // Если не был — просто обновили цифры.
+        }
+
+        // --- Обработчики ---
+        startBtn.addEventListener('click', startTimer);
+        resetBtn.addEventListener('click', resetTimer);
+        flipBtn.addEventListener('click', flipHourglass);
+        // Клик по самим часам тоже переворачивает
+        flipWrapper.addEventListener('click', flipHourglass);
+
+        // Предотвращаем всплытие клика с кнопок, если они вдруг внутри wrapper (нет, они снаружи)
+        // Но на всякий случай: кнопки вне flipWrapper, так что ок.
+
+        // Инициализация
+        (function init() {
+            timeLeft = TOTAL_SECONDS;
+            refreshUI();
+            startBtn.textContent = '▶ Старт';
+            startBtn.disabled = false;
+            stream.style.opacity = '0';
+        })();
+    })();
+</script>
+</body>
+</html>
